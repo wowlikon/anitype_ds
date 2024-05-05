@@ -1,0 +1,12 @@
+# Executable (linux)
+*
+!*/
+!*.*
+
+# Executable (win)
+*.exe
+
+# Configuration files
+.env
+.vscode/
+.censitive
