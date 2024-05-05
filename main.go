@@ -1,6 +1,6 @@
 package main
 
-//go build -ldflags "-H=windowsgui"
+//go build -ldflags "-H=windowsgui" && ds_rich.exe
 
 import (
 	"fmt"
@@ -120,12 +120,14 @@ func main() {
 		var sd SetData
 
 		crit(c.ShouldBind(&sd))
-		activity := NewActivity(
-			sd.UsrCount,
-			sd.Text,
-			sd.Wt,
-			sd.Usr,
-		)
+		if sd.Text != activity.State {
+			activity = NewActivity(
+				sd.UsrCount,
+				sd.Text,
+				sd.Wt,
+				sd.Usr,
+			)
+		}
 
 		crit(client.SetActivity(*activity))
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
