@@ -1,14 +1,23 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Anitype DS</title>
         <meta charset="UTF-8">
+        <title>Anitype DS</title>
+        <script src="api.js"></script>
         <link rel="stylesheet" type="text/css" href="popup.css"/>
     </head>
     <body>
         <h1>Anitype DS</h1>
-        <button id="useBtn" style="background: var(--default);">Загрузка</button>
-        <script src="popup.js"></script>
+        <button id="useBtn" style="background: var(--default);">Загрузка...</button>
+        <div id="add">
+            <input type="input" class="field" placeholder="Genre" name="genre" id="genre" required />
+            <label for="genre" class="form">Жанр</label>
+        </div>
+        <div id="box">
+            <ol id="filters">
+            </ol>
+        </div>
         <p id="label"></p>
+        <script src="popup.js"></script>
     </body>
 </html>

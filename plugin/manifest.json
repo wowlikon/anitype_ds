@@ -27,7 +27,7 @@
     "webRequest"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; connect-src 'self' http://localhost:878"
+    "extension_pages": "script-src 'self' http://localhost:878; connect-src 'self' http://localhost:878 https://*.github.*"
   },
   "background": {},
   "host_permissions": ["https://anitype.fun/*"]

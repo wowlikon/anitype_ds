@@ -16,17 +16,23 @@ import (
 	"github.com/hugolgst/rich-go/client"
 )
 
-var active bool
+var active, hidden bool
 var activity *client.Activity
+var block_genres = []string{"?"}
 
 const max_users = 7
 const app_id = "1236340575800918056"
 
+type BlockData struct {
+	Genre string `json:"genre"`
+}
+
 type SetData struct {
 	Wt       string `json:"wt"`
 	Usr      string `json:"usr"`
-	UsrCount string `json:"usr_count"`
 	Text     string `json:"text"`
+	Genres   string `json:"genres"`
+	UsrCount string `json:"usr_count"`
 }
 
 func NewActivity(users string, text string, wt_url string, usr_url string) *client.Activity {
@@ -99,21 +105,9 @@ func main() {
 
 	r.GET("/get", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": active,
+			"active": active,
+			"hidden": hidden,
 		})
-	})
-
-	r.GET("/enable", func(c *gin.Context) {
-		crit(client.SetActivity(*activity))
-		c.Writer.WriteString("enabled")
-		client.Login(app_id)
-		active = true
-	})
-
-	r.GET("/disenabled", func(c *gin.Context) {
-		c.Writer.WriteString("disenabled")
-		client.Logout()
-		active = false
 	})
 
 	r.POST("/set", func(c *gin.Context) {
@@ -129,12 +123,54 @@ func main() {
 			)
 		}
 
+		// Скрытие статуса
+		hidden = contain(sd.Genres, block_genres)
+		if !active {
+			if !hidden {
+				enable()
+			}
+		} else {
+			if hidden {
+				disable()
+			}
+		}
+
 		crit(client.SetActivity(*activity))
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
 
-	go r.Run("localhost:878")    // Run API in goroutine
-	systray.Run(onReady, onExit) // Tray icon
+	r.GET("/enable", func(c *gin.Context) {
+		c.Writer.WriteString("enabled")
+		enable()
+	})
+
+	r.GET("/disenabled", func(c *gin.Context) {
+		c.Writer.WriteString("disenabled")
+		disable()
+	})
+
+	r.POST("/add_block", func(c *gin.Context) {
+		var bd BlockData
+
+		crit(c.ShouldBind(&bd))
+		block_genres = append(block_genres, bd.Genre)
+		c.JSON(http.StatusOK, gin.H{"genres": block_genres})
+	})
+
+	r.POST("/del_block", func(c *gin.Context) {
+		var bd BlockData
+
+		crit(c.ShouldBind(&bd))
+		block_genres = remove(block_genres, bd.Genre)
+		c.JSON(http.StatusOK, gin.H{"genres": block_genres})
+	})
+
+	r.GET("/get_block", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"genres": block_genres})
+	})
+
+	go r.Run("localhost:878")    // Запуск API
+	systray.Run(onReady, onExit) // Добавление в трэй
 }
 
 func crit(err error) {
@@ -143,10 +179,46 @@ func crit(err error) {
 	}
 }
 
+func contain(genres string, arr []string) bool {
+	arr1 := strings.Split(genres, ", ")
+	set := make(map[string]bool)
+	for _, elem := range arr1 {
+		set[elem] = true
+	}
+
+	for _, elem := range arr {
+		if set[elem] {
+			return true
+		}
+	}
+
+	return false
+}
+
+func enable() {
+	crit(client.SetActivity(*activity))
+	client.Login(app_id)
+	active = true
+}
+
+func disable() {
+	client.Logout()
+	active = false
+}
+
 func getIcon(s string) []byte {
 	b, err := os.ReadFile(s)
 	crit(err)
 	return b
+}
+
+func remove[T comparable](l []T, item T) []T {
+	for i, other := range l {
+		if other == item {
+			return append(l[:i], l[i+1:]...)
+		}
+	}
+	return l
 }
 
 func onReady() {
