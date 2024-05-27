@@ -2,7 +2,7 @@ const api = 'http://localhost:878';
 var wt_try_genres = false;
 var wt_try_tile = false;
 var wt_title = "?";
-var genres = "?";
+var genres = "";
 
 function SendData(url, data) {
   fetch(url, {
@@ -14,7 +14,7 @@ function SendData(url, data) {
   })
   .then(response => response.json())
   .then(data => console.log(data))
-  .catch(error => console.error(error));
+  .catch(error => {console.error(url, data, error)});
 }
 
 function get_wt_title(path){
@@ -34,22 +34,28 @@ function get_wt_title(path){
 
 function get_genres(path){
   var req = new XMLHttpRequest(); 
-  
+
   req.open('GET', `https://anitype.fun/anime/${path[1].split("?")[0]}`, false);   
   req.send(null);
   
-  if(req.status == 200) {
+  if (req.status == 200) {
     var parser = new DOMParser();
     var page = parser.parseFromString(req.responseText, "text/html");
-    genres = page.body.getElementsByClassName("anime_info_el_value")[4].innerText;
+    keys = page.body.getElementsByClassName("anime_info_el_key");
+    values = page.body.getElementsByClassName("anime_info_el_value");
+    for (index = 0; index < keys.length; ++index) {
+      if (keys[index].innerText == "Жанры") {
+        genres = values[index].innerText;
+        break;
+      }
+    }
   }
-
   wt_try_genres = true;
 }
 
 function update(url) {
+  var count = 0;
   var text = "";
-  var count = "";
   var wt_url = "";
   var user_url = "";
 
@@ -82,6 +88,10 @@ function update(url) {
     case "library":
       text = "Просматривает библиотеку";
       break;
+    
+    case "event":
+      text = "Просматривает событие";
+      break;
       
     case "open":
       var list = path[1].split("?")[0];
@@ -100,7 +110,7 @@ function update(url) {
       break;
     }
   if ((text != "") && window.location.href.startsWith("https://anitype.fun/")) {
-    const setData = {
+  const setData = {
       genres: genres, wt: wt_url,
       usr: user_url, usrCount: count, text: text,
     };

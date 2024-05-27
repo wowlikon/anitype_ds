@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,8 +18,9 @@ import (
 var active, hidden bool
 var activity *client.Activity
 var block_genres = []string{"?"}
+var mActive, mAuto *systray.MenuItem
 
-const max_users = 7
+const max_users = 10
 const app_id = "1236340575800918056"
 
 type BlockData struct {
@@ -32,21 +32,37 @@ type SetData struct {
 	Usr      string `json:"usr"`
 	Text     string `json:"text"`
 	Genres   string `json:"genres"`
-	UsrCount string `json:"usr_count"`
+	UsrCount int    `json:"usr_count"`
 }
 
-func NewActivity(users string, text string, wt_url string, usr_url string) *client.Activity {
-	var user_count int
-	user_count, _ = strconv.Atoi(users)
-
+func NewActivity(user_count int, text string, wt_url string, usr_url string) *client.Activity {
+	var openBtn *client.Button
 	now := time.Now()
-	openBtn := &client.Button{
-		Label: "Open anitype",
-		Url:   "https://anitype.fun/",
+
+	if wt_url != "" {
+		openBtn = &client.Button{
+			Label: "Присоединиться к просмотру",
+			Url:   wt_url,
+		}
+	} else if (usr_url != "") && strings.Contains(usr_url, "@") {
+		openBtn = &client.Button{
+			Label: fmt.Sprintf("Открыть профиль @%s", strings.SplitAfter(usr_url, "@")[1]),
+			Url:   usr_url,
+		}
+	} else {
+		openBtn = &client.Button{
+			Label: "Перейти на сайт",
+			Url:   "https://anitype.fun/",
+		}
 	}
 
-	res := &client.Activity{
-		Details: "Anitype - сайт для просмотра аниме",
+	srcBtn := &client.Button{
+		Label: "Исходный код Anitype DS RPC",
+		Url:   "https://github.com/wowlikon/anitype_ds",
+	}
+
+	res := client.Activity{
+		Details: "Сайт для просмотра аниме",
 
 		LargeImage: "https://cdn.discordapp.com/app-icons/1236340575800918056/acae41c65c1d6977b8ca7529cddc9ecd.png",
 		LargeText:  "Anitype.fun",
@@ -60,7 +76,7 @@ func NewActivity(users string, text string, wt_url string, usr_url string) *clie
 			Start: &now,
 		},
 
-		Buttons: []*client.Button{openBtn},
+		Buttons: []*client.Button{openBtn, srcBtn},
 	}
 
 	if user_count > 1 {
@@ -71,30 +87,10 @@ func NewActivity(users string, text string, wt_url string, usr_url string) *clie
 		}
 	}
 
-	if wt_url != "" {
-		res.Buttons = append(res.Buttons, &client.Button{
-			Label: "Watch together",
-			Url:   wt_url,
-		})
-	}
-
-	if (usr_url != "") && strings.Contains(usr_url, "@") {
-		res.Buttons = append(res.Buttons, &client.Button{
-			Label: fmt.Sprintf("Open %s's profile", strings.SplitAfter(usr_url, "@")[1]),
-			Url:   usr_url,
-		})
-	}
-
-	return res
+	return &res
 }
 
 func main() {
-	crit(client.Login(app_id))
-
-	activity = NewActivity("0", "Ожидание...", "", "")
-	crit(client.SetActivity(*activity))
-	active = true
-
 	// API
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -115,27 +111,29 @@ func main() {
 
 		crit(c.ShouldBind(&sd))
 		if sd.Text != activity.State {
-			activity = NewActivity(
-				sd.UsrCount,
-				sd.Text,
-				sd.Wt,
-				sd.Usr,
-			)
+			fmt.Println("Updated!")
+			activity = NewActivity(sd.UsrCount, sd.Text, sd.Wt, sd.Usr)
+			crit(client.SetActivity(*activity))
 		}
 
 		// Скрытие статуса
 		hidden = contain(sd.Genres, block_genres)
-		if !active {
-			if !hidden {
-				enable()
-			}
-		} else {
-			if hidden {
-				disable()
-			}
+
+		if active && hidden {
+			disenable()
 		}
 
-		crit(client.SetActivity(*activity))
+		if !active && !hidden {
+			enable()
+		}
+
+		fmt.Printf("Text: %s\n", sd.Text)
+		fmt.Printf("WT: %s\n", sd.Wt)
+		fmt.Printf("Usr: %s\n", sd.Usr)
+		fmt.Printf("UsrCount: %d\n", sd.UsrCount)
+		fmt.Printf("Genres: %s\n", sd.Genres)
+		fmt.Printf("Hiden: %t\n", hidden)
+
 		c.JSON(http.StatusOK, gin.H{"status": "success"})
 	})
 
@@ -146,7 +144,7 @@ func main() {
 
 	r.GET("/disenabled", func(c *gin.Context) {
 		c.Writer.WriteString("disenabled")
-		disable()
+		disenable()
 	})
 
 	r.POST("/add_block", func(c *gin.Context) {
@@ -169,6 +167,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"genres": block_genres})
 	})
 
+	activity = NewActivity(0, "Ожидание...", "", "")
 	go r.Run("localhost:878")    // Запуск API
 	systray.Run(onReady, onExit) // Добавление в трэй
 }
@@ -180,6 +179,10 @@ func crit(err error) {
 }
 
 func contain(genres string, arr []string) bool {
+	if len(genres) == 0 {
+		return false
+	}
+
 	arr1 := strings.Split(genres, ", ")
 	set := make(map[string]bool)
 	for _, elem := range arr1 {
@@ -197,12 +200,16 @@ func contain(genres string, arr []string) bool {
 
 func enable() {
 	crit(client.SetActivity(*activity))
-	client.Login(app_id)
+	crit(client.Login(app_id))
+	mActive.SetTitle("Discord RPC включен")
+	mActive.Check()
 	active = true
 }
 
-func disable() {
+func disenable() {
 	client.Logout()
+	mActive.SetTitle("Discord RPC выключен")
+	mActive.Uncheck()
 	active = false
 }
 
@@ -225,8 +232,9 @@ func onReady() {
 	systray.SetTitle("Anitype")
 	systray.SetTooltip("Anitype")
 	systray.SetIcon(getIcon("icon.ico"))
-	mChecked := systray.AddMenuItemCheckbox("Autostart off", "Set autostart", false)
-	mQuit := systray.AddMenuItem("Quit", "Close this app")
+	mAuto = systray.AddMenuItemCheckbox("Автозапуск выключен", "Автозапуск приложения", false)
+	mActive = systray.AddMenuItemCheckbox("Discord startus включен", "Turn on/off", active)
+	mQuit := systray.AddMenuItem("Выйти", "Закрыть приложение")
 
 	go func() {
 		for {
@@ -234,17 +242,25 @@ func onReady() {
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
-			case <-mChecked.ClickedCh:
-				if mChecked.Checked() {
-					mChecked.Uncheck()
-					mChecked.SetTitle("Autostart off")
+			case <-mAuto.ClickedCh:
+				if mAuto.Checked() {
+					mAuto.Uncheck()
+					mAuto.SetTitle("Автозапуск выключен")
 				} else {
-					mChecked.Check()
-					mChecked.SetTitle("Autostart on")
+					mAuto.Check()
+					mAuto.SetTitle("Автозапуск включен")
+				}
+			case <-mActive.ClickedCh:
+				if mActive.Checked() {
+					disenable()
+				} else {
+					enable()
 				}
 			}
 		}
 	}()
+
+	enable()
 }
 
 func onExit() {
